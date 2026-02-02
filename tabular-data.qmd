@@ -60,3 +60,30 @@ exio |>
 ```
 
 > **Task**: Construct a query to find the top 5 sectors in the US by CO2 emissions in 2022. Remember to check the column names in `exio` to find the appropriate emissions flow.
+
+```{r}
+# Solution: Top 5 sectors in US by CO2 emissions (2022)
+# Configure S3 access for public data
+duckdbfs::duckdb_secrets(
+    key = "anonymous",
+    secret = "anonymous",
+    endpoint = "s3.amazonaws.com",
+    region = "us-west-2"
+)
+
+# Target the F_satellite matrix directly to access stressor column
+exio_f_sat <- open_dataset(
+    "s3://us-west-2.opendata.source.coop/youssef-harby/exiobase-3/4588235/parquet/year=2022/format=ixi/matrix=F_satellite/"
+)
+
+exio_f_sat |>
+    filter(
+        grepl("CO2", stressor)
+    ) |>
+    group_by(sector) |>
+    summarize(total_co2 = sum(value, na.rm = TRUE), .groups = "drop") |>
+    arrange(desc(total_co2)) |>
+    head(5) |>
+    collect()
+```
+
