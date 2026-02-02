@@ -24,7 +24,6 @@ We will be working with [EXIOBASE 3.8.1](https://source.coop/youssef-harby/exiob
 ```{r}
 library(duckdbfs)
 library(dplyr)
-
 ```
 
 ## Exercise 1: connecting to remote data
