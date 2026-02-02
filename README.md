@@ -6,7 +6,7 @@ Working with larger-than-RAM data using duckdbfs
 
 This module explores high-performance workflows for tabular data analysis. We use `duckdbfs` to work with datasets larger than available RAM by leveraging DuckDB's streaming and remote file access capabilities.
 
-## Case Study: Global Supply Chains
+## Case Study: Global Supply Chains the
 
 We analyze [EXIOBASE 3.8.1](https://source.coop/youssef-harby/exiobase-3), a global Multi-Regional Input-Output (MRIO) database that tracks economic transactions between sectors and regions, along with their environmental impacts.
 
