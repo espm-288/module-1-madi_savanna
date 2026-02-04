@@ -60,3 +60,159 @@ exio |>
 ```
 
 > **Task**: Construct a query to find the top 5 sectors in the US by CO2 emissions in 2022. Remember to check the column names in `exio` to find the appropriate emissions flow.
+
+```{r}
+# Find the top 5 sectors in the US by CO2 emissions in 2022
+# Replace 'CO2' and 'sector' with the actual column names if needed
+exio |>
+  filter(year == 2022, region == "US") |>
+  arrange(desc(CO2)) |>
+  select(sector, CO2) |>
+  head(5) |>
+  collect()
+```
+
+> Use colnames(exio) to confirm the correct column names for CO2 emissions and sector in your dataset.
+
+## Exercise 3: Open Only CO2 Emissions
+
+To work with only CO2 emissions, filter for the relevant year, region, and select the CO2 column. You may need to adjust the column name if it differs (e.g., `CO2`, `CO2_emissions`, or similar).
+
+```{r}
+# View available columns to find the correct CO2 emissions column
+colnames(exio)
+
+# Query: Top 5 sectors in the US by CO2 emissions in 2022
+# Replace 'CO2' and 'sector' with the actual column names if needed
+exio |>
+    filter(year == 2022, region == "US") |>
+    arrange(desc(CO2)) |>
+    select(sector, CO2) |>
+    head(5) |>
+    collect()
+```
+
+## Exploring the EXIOBASE Dataset Structure
+
+```{r}
+# Print the number of columns and rows, and show column names and a summary
+
+# Get the number of columns
+num_cols <- length(colnames(exio))
+cat("Number of columns:", num_cols, "\n")
+
+# Show column names
+cat("Column names:\n")
+print(colnames(exio))
+
+# Get the number of rows (may be slow for large datasets, so use count() for lazy evaluation)
+row_count <- exio |> count() |> collect()
+cat("Number of rows:", row_count$n, "\n")
+
+# Show a summary of the first few rows to understand what the columns are about
+cat("\nPreview of the data:\n")
+print(head(collect(exio), 5))
+```
+
+> The columns typically include year, region, sector, matrix type, and various economic or environmental flows (such as CO2 emissions). Use the output above to identify the exact column names and their meanings in your dataset.
+
+## Summarizing CO2 Emissions Data
+
+```{r}
+# Replace 'CO2' and 'sector' with the actual column names if needed
+co2_data <- exio |>
+  select(year, region, sector, CO2) |>
+  collect()
+
+# Show a preview
+head(co2_data, 10)
+
+# Summarize CO2 emissions (total, mean, min, max)
+library(dplyr)
+co2_summary <- co2_data |>
+  summarise(
+    total_CO2 = sum(CO2, na.rm = TRUE),
+    mean_CO2 = mean(CO2, na.rm = TRUE),
+    min_CO2 = min(CO2, na.rm = TRUE),
+    max_CO2 = max(CO2, na.rm = TRUE)
+  )
+co2_summary
+```
+
+> Adjust the column name 'CO2' if your dataset uses a different name for CO2 emissions. This chunk loads all CO2 data and provides a summary of the values.
+
+## Visualizing CO2 Production by Country and Year
+
+```{r}
+library(ggplot2)
+
+# Summarize total CO2 by year and country (region)
+co2_by_year_country <- co2_data |>
+  group_by(year, region) |>
+  summarise(total_CO2 = sum(CO2, na.rm = TRUE), .groups = 'drop')
+
+# Find the top 5 years with the highest total CO2 emissions (across all countries)
+top_years <- co2_by_year_country |>
+  group_by(year) |>
+  summarise(year_total = sum(total_CO2, na.rm = TRUE)) |>
+  arrange(desc(year_total)) |>
+  slice_head(n = 5) |>
+  pull(year)
+
+# Filter data for only the top 5 years
+co2_top_years <- co2_by_year_country |>
+  filter(year %in% top_years)
+
+# Plot CO2 production by country for the top 5 years
+
+ggplot(co2_top_years, aes(x = region, y = total_CO2, fill = as.factor(year))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "CO2 Production by Country for Top 5 Years",
+       x = "Country (Region)",
+       y = "Total CO2 Emissions",
+       fill = "Year") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+> This plot shows CO2 production by country for the 5 years with the highest total global CO2 emissions. Adjust column names if needed.
+
+## Exporting CO2 Data as Satellite Data CSV
+
+```{r}
+# Write the CO2 data to a CSV file
+write.csv(co2_data, "co2_satellite_data.csv", row.names = FALSE)
+```
+
+> This will save the CO2 data as 'co2_satellite_data.csv' in your working directory. Adjust the data frame name if needed.
+
+## Analyzing Country Patterns and Connected Sectors
+
+```{r}
+# Summarize total CO2 emissions by country and sector
+country_sector_summary <- co2_data |>
+  group_by(region, sector) |>
+  summarise(total_CO2 = sum(CO2, na.rm = TRUE), .groups = 'drop')
+
+# Find the top 5 sectors for each country by CO2 emissions
+library(dplyr)
+top_sectors_by_country <- country_sector_summary |>
+  group_by(region) |>
+  arrange(desc(total_CO2)) |>
+  slice_head(n = 5) |>
+  ungroup()
+
+# Show the result
+print(top_sectors_by_country)
+
+# Visualize country-sector CO2 patterns
+library(ggplot2)
+ggplot(top_sectors_by_country, aes(x = sector, y = total_CO2, fill = region)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Top 5 Sectors by CO2 Emissions for Each Country",
+       x = "Sector",
+       y = "Total CO2 Emissions",
+       fill = "Country (Region)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+> This chunk summarizes and visualizes the top 5 sectors by CO2 emissions for each country, revealing patterns and connections between countries and sectors.
