@@ -24,6 +24,7 @@ We will be working with [EXIOBASE 3.8.1](https://source.coop/youssef-harby/exiob
 ```{r}
 library(duckdbfs)
 library(dplyr)
+library(ggplot2)
 ```
 
 ## Exercise 1: connecting to remote data
@@ -39,6 +40,8 @@ duckdbfs::duckdb_secrets(
     endpoint = "s3.amazonaws.com",
     region = "us-west-2"
 )
+
+# Open the entire dataset with ** pattern for recursive scanning
 s3_url <- "s3://us-west-2.opendata.source.coop/youssef-harby/exiobase-3/4588235/parquet/**"
 
 # Open the dataset lazily
@@ -60,3 +63,177 @@ exio |>
 ```
 
 > **Task**: Construct a query to find the top 5 sectors in the US by CO2 emissions in 2022. Remember to check the column names in `exio` to find the appropriate emissions flow.
+
+```{r}
+# First, check the column names in exio to find the right columns
+glimpse(exio)
+ 
+# Query CO2 emissions by sector for the US in 2022
+co2_emissions <- exio |>
+    filter(year == 2022, 
+           region == "US",
+           stressor %like% "%CO2%") |>
+    group_by(sector) |>
+    summarise(total_co2 = sum(value, na.rm = TRUE)) |>
+    arrange(desc(total_co2)) |>
+    head(5) |>
+    collect()
+
+co2_emissions
+```
+
+## Exercise 3: CO2 Emissions Over Time by Country (Top 5 Emitters)
+
+First, let's identify the top 5 CO2 emitting countries in 2022:
+
+```{r}
+# Find the top 5 emitting countries in 2022
+top_emitters_2022 <- exio |>
+    filter(year == 2022,
+           matrix == "F_satellite",
+           stressor %like% "%CO2%") |>
+    group_by(region) |>
+    summarise(total_co2 = sum(value, na.rm = TRUE)) |>
+    filter(!grepl("^W", region)) |>  # Exclude rest-of-world regions
+    arrange(desc(total_co2)) |>
+    head(5) |>
+    collect()
+
+top_emitters_2022
+```
+
+Now, let's get the time series data for these top 5 countries across all years:
+
+```{r}
+# Get the list of top 5 countries
+top_5_countries <- top_emitters_2022$region
+
+# Query CO2 emissions for these countries across all years
+co2_timeseries <- exio |>
+    filter(matrix == "F_satellite",
+           stressor %like% "%CO2%",
+           region %in% top_5_countries) |>
+    group_by(year, region) |>
+    summarise(total_co2 = sum(value, na.rm = TRUE)) |>
+    arrange(year, region) |>
+    collect()
+
+# View the data
+head(co2_timeseries, 20)
+```
+
+Create a line plot showing CO2 emissions over time for the top 5 countries:
+
+```{r}
+# Create the time series plot
+ggplot(co2_timeseries, aes(x = year, y = total_co2, color = region)) +
+    geom_line(linewidth = 1.2) +
+    geom_point(size = 2.5) +
+    labs(
+        title = "CO2 Emissions Over Time: Top 5 Emitting Countries",
+        subtitle = "Based on EXIOBASE 3.8.1 data (1995-2022)",
+        x = "Year",
+        y = "Total CO2 Emissions",
+        color = "Country/Region"
+    ) +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(face = "bold", size = 14),
+        legend.position = "right",
+        legend.title = element_text(face = "bold", size = 11),
+        legend.text = element_text(size = 10),
+        legend.background = element_rect(fill = "white", color = "gray80"),
+        legend.key.size = unit(1, "cm")
+    ) +
+    scale_x_continuous(breaks = seq(1995, 2022, by = 5))
+```
+
+## Exercise 4: Countries with Largest CO2 Emission Reductions 
+This is just me trying something for fun to see what I can do here!!
+Let's identify which countries have reduced their CO2 emissions the most between 1995 and 2022:
+
+```{r}
+# Get CO2 emissions for all countries in 1995 and 2022
+co2_1995 <- exio |>
+    filter(year == 1995,
+           matrix == "F_satellite",
+           stressor %like% "%CO2%") |>
+    group_by(region) |>
+    summarise(co2_1995 = sum(value, na.rm = TRUE)) |>
+    collect()
+
+co2_2022 <- exio |>
+    filter(year == 2022,
+           matrix == "F_satellite",
+           stressor %like% "%CO2%") |>
+    group_by(region) |>
+    summarise(co2_2022 = sum(value, na.rm = TRUE)) |>
+    collect()
+
+# Join the two datasets and calculate change
+co2_change <- co2_1995 |>
+    inner_join(co2_2022, by = "region") |>
+    mutate(
+        absolute_change = co2_2022 - co2_1995,
+        percent_change = ((co2_2022 - co2_1995) / co2_1995) * 100
+    ) |>
+    filter(!grepl("^W", region)) |>  # Exclude rest-of-world regions (WA, WE, WF, WL, WM)
+    arrange(absolute_change)
+
+# View countries with the largest absolute decreases
+head(co2_change, 5)
+```
+
+Now let's visualize the top 5 countries with the largest absolute reductions:
+
+```{r}
+# Get top 5 reducers
+top_reducers <- co2_change |>
+    head(5)
+
+# Create a bar plot
+ggplot(top_reducers, aes(x = reorder(region, absolute_change), y = absolute_change, fill = region)) +
+    geom_col() +
+    coord_flip() +
+    scale_fill_brewer(palette = "Set2") +
+    labs(
+        title = "Top 5 Countries with Largest CO2 Emission Reductions",
+        subtitle = "Change from 1995 to 2022",
+        x = "Country",
+        y = "Absolute Change in CO2 Emissions"
+    ) +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(face = "bold", size = 14),
+        legend.position = "none"
+    )
+```
+
+Let's also look at percentage reductions (excluding countries with very low baseline emissions):
+
+```{r}
+# Filter to countries with substantial 1995 emissions (>1000 units) to avoid outliers
+substantial_emitters <- co2_change |>
+    filter(co2_1995 > 1000) |>
+    arrange(percent_change) |>
+    head(5)
+
+substantial_emitters
+
+# Visualize percentage reductions
+ggplot(substantial_emitters, aes(x = reorder(region, percent_change), y = percent_change, fill = region)) +
+    geom_col() +
+    coord_flip() +
+    scale_fill_brewer(palette = "Dark2") +
+    labs(
+        title = "Top 5 Countries with Largest % CO2 Emission Reductions",
+        subtitle = "Change from 1995 to 2022 (excluding very small emitters)",
+        x = "Country",
+        y = "Percent Change in CO2 Emissions (%)"
+    ) +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(face = "bold", size = 13),
+        legend.position = "none"
+    )
+```
