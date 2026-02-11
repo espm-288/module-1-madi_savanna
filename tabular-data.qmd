@@ -25,6 +25,7 @@ We will be working with [EXIOBASE 3.8.1](https://source.coop/youssef-harby/exiob
 library(duckdbfs)
 library(dplyr)
 library(ggplot2)
+library(quarto)
 ```
 
 ## Exercise 1: connecting to remote data
@@ -44,8 +45,9 @@ duckdbfs::duckdb_secrets(
 # Open the entire dataset with ** pattern for recursive scanning
 s3_url <- "s3://us-west-2.opendata.source.coop/youssef-harby/exiobase-3/4588235/parquet/**"
 
-# Open the dataset lazily
-exio <- open_dataset(s3_url)
+# Use SQL to read with union_by_name option
+exio <- tbl(duckdbfs::cached_connection(), 
+            sql(paste0("SELECT * FROM read_parquet('", s3_url, "', union_by_name=true)")))
 
 # View the schema (column names and types) without reading data
 glimpse(exio)
