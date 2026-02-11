@@ -25,6 +25,7 @@ We will be working with [EXIOBASE 3.8.1](https://source.coop/youssef-harby/exiob
 library(duckdbfs)
 library(dplyr)
 library(ggplot2)
+library(quarto)
 ```
 
 ## Exercise 1: connecting to remote data
@@ -65,21 +66,22 @@ exio |>
 > **Task**: Construct a query to find the top 5 sectors in the US by CO2 emissions in 2022. Remember to check the column names in `exio` to find the appropriate emissions flow.
 
 ```{r}
-# First, check the column names in exio to find the right columns
-glimpse(exio)
- 
-# Query CO2 emissions by sector for the US in 2022
-co2_emissions <- exio |>
-    filter(year == 2022, 
-           region == "US",
-           stressor %like% "%CO2%") |>
+# Solution: Top 5 sectors in US by CO2 emissions (2022)
+
+# Target the F_satellite matrix directly to access stressor column
+exio_f_sat <- open_dataset(
+    "s3://us-west-2.opendata.source.coop/youssef-harby/exiobase-3/4588235/parquet/year=2022/format=ixi/matrix=F_satellite/"
+)
+
+exio_f_sat |>
+    filter(
+        grepl("CO2", stressor)
+    ) |>
     group_by(sector) |>
-    summarise(total_co2 = sum(value, na.rm = TRUE)) |>
+    summarize(total_co2 = sum(value, na.rm = TRUE), .groups = "drop") |>
     arrange(desc(total_co2)) |>
     head(5) |>
     collect()
-
-co2_emissions
 ```
 
 ## Exercise 3: CO2 Emissions Over Time by Region (Top 5 Emitters)
@@ -94,7 +96,6 @@ top_emitters_2022 <- exio |>
            stressor %like% "%CO2%") |>
     group_by(region) |>
     summarise(total_co2 = sum(value, na.rm = TRUE)) |>
-    filter(grepl("^W", region)) |>  # Include only rest-of-world regions
     arrange(desc(total_co2)) |>
     head(5) |>
     collect()
@@ -178,8 +179,8 @@ co2_plot
 ggsave("co2_regions_timeseries.png", co2_plot, width = 10, height = 6, dpi = 300)
 ```
 
-## Exercise 4: Regions with Largest CO2 Emission Reductions 
-This is just me trying something for fun to see what I can do here!!
+## Exercise 4: Regions with Largest CO2 Emission Reductions
+
 Let's identify which regions have reduced their CO2 emissions the most between 1995 and 2022:
 
 ```{r}
@@ -278,64 +279,65 @@ percent_plot
 ggsave("co2_percent_reduction.png", percent_plot, width = 10, height = 6, dpi = 300)
 ```
 
-## Exercise 5: CO2 Emissions Over Time for Top 5 Regions
+## Exercise 5: CO2 Emissions Over Time for Top 5 Emitting Countries
 
-Now let's look at regions (including rest-of-world aggregates) instead of just countries:
+Now let's look at individual countries (excluding rest-of-world aggregates) to see the top 5 emitting countries:
 
 ```{r}
-# Find the top 5 emitting regions in 2022 (including W regions)
-top_regions_2022 <- exio |>
+# Find the top 5 emitting countries in 2022 (excluding W regions)
+top_countries_2022 <- exio |>
     filter(year == 2022,
            matrix == "F_satellite",
            stressor %like% "%CO2%") |>
     group_by(region) |>
     summarise(total_co2 = sum(value, na.rm = TRUE)) |>
+    filter(!grepl("^W", region)) |>  # Exclude rest-of-world regions
     arrange(desc(total_co2)) |>
     head(5) |>
     collect()
 
-top_regions_2022
+top_countries_2022
 ```
 
-Get time series data for these top 5 regions across all years:
+Get time series data for these top 5 countries across all years:
 
 ```{r}
-# Get the list of top 5 regions
-top_5_regions <- top_regions_2022$region
+# Get the list of top 5 countries
+top_5_countries <- top_countries_2022$region
 
-# Query CO2 emissions for these regions across all years
-co2_regions_timeseries <- exio |>
+# Query CO2 emissions for these countries across all years
+co2_countries_timeseries <- exio |>
     filter(matrix == "F_satellite",
            stressor %like% "%CO2%",
-           region %in% top_5_regions) |>
+           region %in% top_5_countries) |>
     group_by(year, region) |>
     summarise(total_co2 = sum(value, na.rm = TRUE)) |>
     arrange(year, region) |>
     collect()
 
 # View the data
-head(co2_regions_timeseries, 20)
+head(co2_countries_timeseries, 20)
 ```
 
-Create a line plot showing CO2 emissions over time for the top 5 regions:
+Create a line plot showing CO2 emissions over time for the top 5 countries:
 
 ```{r}
-# Add full region names to the data
-co2_regions_timeseries <- co2_regions_timeseries |>
-    mutate(region_name = ifelse(region %in% names(region_names), 
-                                 region_names[region], 
-                                 region))
+# Add full country names to the data
+co2_countries_timeseries <- co2_countries_timeseries |>
+    mutate(country_name = ifelse(region %in% names(region_names), 
+                                  region_names[region], 
+                                  region))
 
 # Create the time series plot
-regions_plot <- ggplot(co2_regions_timeseries, aes(x = year, y = total_co2, color = region_name)) +
+countries_plot <- ggplot(co2_countries_timeseries, aes(x = year, y = total_co2, color = country_name)) +
     geom_line(linewidth = 1.2) +
     geom_point(size = 2.5) +
     labs(
-        title = "CO2 Emissions Over Time: Top 5 Emitting Regions",
+        title = "CO2 Emissions Over Time: Top 5 Emitting Countries",
         subtitle = "Based on EXIOBASE 3.8.1 data (1995-2022)",
         x = "Year",
         y = "Total CO2 Emissions",
-        color = "Region"
+        color = "Country"
     ) +
     theme_minimal() +
     theme(
@@ -348,8 +350,8 @@ regions_plot <- ggplot(co2_regions_timeseries, aes(x = year, y = total_co2, colo
     ) +
     scale_x_continuous(breaks = seq(1995, 2022, by = 5))
 
-regions_plot
+countries_plot
 
 # Save the plot
-ggsave("co2_all_regions_timeseries.png", regions_plot, width = 10, height = 6, dpi = 300)
+ggsave("co2_countries_timeseries.png", countries_plot, width = 10, height = 6, dpi = 300)
 ```

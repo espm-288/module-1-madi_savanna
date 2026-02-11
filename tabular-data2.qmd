@@ -1,0 +1,205 @@
+---
+title: "Module 1: Tabular Data"
+subtitle: "Working with larger-than-RAM data using duckdbfs"
+author: "ESPM 288"
+format: html
+---
+
+## Introduction
+
+In this module, we will explore high-performance workflows for tabular data. We will use `duckdbfs` to work with datasets that are larger than available RAM by leveraging DuckDB's streaming and remote file access capabilities.
+
+## Case Study: Global Supply Chains
+
+We will be working with [EXIOBASE 3.8.1](https://source.coop/youssef-harby/exiobase-3), a global Multi-Regional Input-Output (MRIO) database. This dataset tracks economic transactions between sectors and regions, along with their environmental impacts (emissions, resource use, etc.).
+
+**Data description:**
+- **Coverage**: 44 countries + 5 rest-of-world regions.
+- **Timeframe**: 1995–2022.
+- **Content**: Economic transactions (Z matrix), final demand (Y matrix), and environmental stressors (F matrix).
+- **Format**: Cloud-optimized Parquet, partitioned by year and matrix type.
+
+## Setup
+
+```{r}
+library(duckdbfs)
+library(dplyr)
+library(ggplot2)
+```
+
+## Exercise 1: connecting to remote data
+
+We can open the entire dataset without downloading it using `open_dataset()`. The data is hosted on Source Cooperative. The `**` pattern allows recursive scanning of the partitioned parquet files.
+
+```{r}
+# Remote S3 path to EXIOBASE 3 (Source Cooperative)
+
+duckdbfs::duckdb_secrets(
+    key = "",
+    secret = "",
+    endpoint = "s3.amazonaws.com",
+    region = "us-west-2"
+)
+s3_url <- "s3://us-west-2.opendata.source.coop/youssef-harby/exiobase-3/4588235/parquet/**"
+
+# Open the dataset lazily
+exio <- open_dataset(s3_url)
+
+# View the schema (column names and types) without reading data
+glimpse(exio)
+```
+
+## Exercise 2: Efficient Filtering
+
+The dataset is large. We should filter *before* collecting any data into R.
+
+```{r}
+exio |>
+    filter(year == 2022, region == "US") |>
+    head() |> # view the first 6 rows
+    collect()
+```
+
+> **Task**: Construct a query to find the top 5 sectors in the US by CO2 emissions in 2022. Remember to check the column names in `exio` to find the appropriate emissions flow.
+
+```{r}
+# Solution: Top 5 sectors in US by CO2 emissions (2022)
+
+# Target the F_satellite matrix directly to access stressor column
+exio_f_sat <- open_dataset(
+    "s3://us-west-2.opendata.source.coop/youssef-harby/exiobase-3/4588235/parquet/year=2022/format=ixi/matrix=F_satellite/"
+)
+
+exio_f_sat |>
+    filter(
+        grepl("CO2", stressor)
+    ) |>
+    group_by(sector) |>
+    summarize(total_co2 = sum(value, na.rm = TRUE), .groups = "drop") |>
+    arrange(desc(total_co2)) |>
+    head(5) |>
+    collect()
+```
+
+## Exercise 3: CO2 Emissions Over Time by Country (Top 5 Emitters)
+
+First, let's identify the top 5 CO2 emitting countries in 2022:
+
+```{r}
+# Find the top 5 emitting countries in 2022
+top_emitters_2022 <- exio |>
+    filter(year == 2022,
+           matrix == "F_satellite",
+           stressor %like% "%CO2%") |>
+    group_by(region) |>
+    summarise(total_co2 = sum(value, na.rm = TRUE)) |>
+    filter(!grepl("^W", region)) |>  # Exclude rest-of-world regions
+    arrange(desc(total_co2)) |>
+    head(5) |>
+    collect()
+
+top_emitters_2022
+```
+
+Now, let's get the time series data for these top 5 countries across all years:
+
+```{r}
+# Get the list of top 5 countries
+top_5_countries <- top_emitters_2022$region
+
+# Query CO2 emissions for these countries across all years
+co2_timeseries <- exio |>
+    filter(matrix == "F_satellite",
+           stressor %like% "%CO2%",
+           region %in% top_5_countries) |>
+    group_by(year, region) |>
+    summarise(total_co2 = sum(value, na.rm = TRUE)) |>
+    arrange(year, region) |>
+    collect()
+
+# View the data
+head(co2_timeseries, 20)
+```
+
+Create a line plot showing CO2 emissions over time for the top 5 countries:
+
+```{r}
+# Create the time series plot
+ggplot(co2_timeseries, aes(x = year, y = total_co2, color = region)) +
+    geom_line(linewidth = 1.2) +
+    geom_point(size = 2.5) +
+    labs(
+        title = "CO2 Emissions Over Time: Top 5 Emitting Countries",
+        subtitle = "Based on EXIOBASE 3.8.1 data (1995-2022)",
+        x = "Year",
+        y = "Total CO2 Emissions",
+        color = "Country/Region"
+    ) +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(face = "bold", size = 14),
+        legend.position = "right",
+        legend.title = element_text(face = "bold", size = 11),
+        legend.text = element_text(size = 10),
+        legend.background = element_rect(fill = "white", color = "gray80"),
+        legend.key.size = unit(1, "cm")
+    ) +
+    scale_x_continuous(breaks = seq(1995, 2022, by = 5))
+```
+
+## Exercise 4: Countries with Largest CO2 Emission Reductions 
+There are lots of stressors, how do I find the stressors related to CO2?
+
+```{r}
+# List all unique stressors containing 'CO2' to see available options
+co2_stressors <- exio |>
+    filter(matrix == "F_satellite") |>
+    distinct(stressor) |>
+    filter(grepl("CO2", stressor)) |>
+    collect()
+co2_stressors
+```
+
+Now, let's identify which countries have emitted the most CO2 emissions between 1995 and 2022:
+```{r}
+# Calculate total CO2 emissions for the top 5 countries across all years and countries
+total_co2_by_country <- exio |>
+    filter(matrix == "F_satellite") |>
+    collect() |>
+    filter(grepl("CO2|carbon Dioxide", stressor, ignore.case = TRUE))
+```
+
+```{r}
+#Calculate which regions are the top 5 CO2 emitters
+top_regional_emitters <- total_co2_by_country |>
+    group_by(region) |>
+    summarize(total_co2 = sum(value, na.rm = TRUE)) |>
+    filter(!grepl("^W", region)) |>  # Exclude rest-of-world regions
+    arrange(desc(total_co2)) |>
+    head(5) |>
+    collect()
+
+# View the data first
+print(top_regional_emitters)
+
+
+```
+
+```{r}
+
+# Plot the top 5 regional emitters by total CO2 emissions from 1995 to 2022
+print(ggplot(top_regional_emitters, aes(x = reorder(region, -total_co2), y = total_co2, fill = region)) +
+    geom_bar(stat = "identity")
+    labs(
+        title = "Total CO2 Emissions by Country (1995-2022)",
+        x = "Country/Region",
+        y = "Total CO2 Emissions",
+        fill = "Country/Region"
+    ) +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(face = "bold", size = 14),
+        legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1)
+    ))
+```  
