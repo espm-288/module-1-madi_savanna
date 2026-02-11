@@ -336,4 +336,4 @@ ggplot(co2_regions_timeseries, aes(x = year, y = total_co2, color = region_name)
     scale_x_continuous(breaks = seq(1995, 2022, by = 5))
 ```
 
-I ran this in my tabular-data file and it looks good (I think haha)!!
+I ran this in my tabular-data file and it looks good (I think haha)!! I also pushed the plots to github :))
