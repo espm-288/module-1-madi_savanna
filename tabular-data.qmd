@@ -2,9 +2,24 @@
 title: "Module 1: Tabular Data"
 subtitle: "Working with larger-than-RAM data using duckdbfs"
 author: "ESPM 288"
+date: today
 format: 
     html:
+        theme: cosmo
         embed-resources: true
+        toc: true
+        toc-location: left
+        toc-depth: 3
+        code-fold: true
+        code-tools: true
+        code-block-bg: true
+        code-block-border-left: "#31BAE9"
+        smooth-scroll: true
+        number-sections: true
+        fig-width: 10
+        fig-height: 6
+        fig-align: center
+        df-print: paged
 ---
 
 ## Introduction
@@ -24,6 +39,7 @@ We will be working with [EXIOBASE 3.8.1](https://source.coop/youssef-harby/exiob
 ## Setup
 
 ```{r}
+#| echo: false
 library(duckdbfs)
 library(dplyr)
 library(ggplot2)
@@ -34,6 +50,7 @@ library(ggplot2)
 We can open the entire dataset without downloading it using `open_dataset()`. The data is hosted on Source Cooperative. The `**` pattern allows recursive scanning of the partitioned parquet files.
 
 ```{r}
+#| echo: false
 # Remote S3 path to EXIOBASE 3 (Source Cooperative)
 
 duckdbfs::duckdb_secrets(
@@ -107,6 +124,7 @@ top_emitters_2022
 Now, let's get the time series data for these top 5 regions across all years:
 
 ```{r}
+#| echo: false
 # Get the list of top 5 regions
 top_5_regions <- top_emitters_2022$region
 
@@ -127,6 +145,7 @@ head(co2_timeseries, 20)
 Create a line plot showing CO2 emissions over time for the top 5 regions:
 
 ```{r}
+#| echo: false
 # Create a mapping of region codes to full names
 region_names <- c(
     "CN" = "China",
@@ -151,6 +170,9 @@ co2_timeseries <- co2_timeseries |>
     mutate(region_name = ifelse(region %in% names(region_names), 
                                  region_names[region], 
                                  region))
+```
+
+```{r}
 
 # Create the time series plot
 co2_plot <- ggplot(co2_timeseries, aes(x = year, y = total_co2, color = region_name)) +
@@ -175,7 +197,10 @@ co2_plot <- ggplot(co2_timeseries, aes(x = year, y = total_co2, color = region_n
     scale_x_continuous(breaks = seq(1995, 2022, by = 5))
 
 co2_plot
+```
 
+```{r}
+#| echo: false
 # Save the plot
 ggsave("co2_regions_timeseries.png", co2_plot, width = 10, height = 6, dpi = 300)
 ```
@@ -241,7 +266,10 @@ reduction_plot <- ggplot(top_reducers, aes(x = reorder(region, absolute_change),
     )
 
 reduction_plot
+```
 
+```{r}
+#| echo: false
 # Save the plot
 ggsave("co2_absolute_reduction.png", reduction_plot, width = 10, height = 6, dpi = 300)
 ```
@@ -275,7 +303,10 @@ percent_plot <- ggplot(substantial_emitters, aes(x = reorder(region, percent_cha
     )
 
 percent_plot
+```
 
+```{r}
+#| echo: false
 # Save the plot
 ggsave("co2_percent_reduction.png", percent_plot, width = 10, height = 6, dpi = 300)
 ```
@@ -303,6 +334,7 @@ top_countries_2022
 Get time series data for these top 5 countries across all years:
 
 ```{r}
+#| echo: false
 # Get the list of top 5 countries
 top_5_countries <- top_countries_2022$region
 
@@ -323,11 +355,15 @@ head(co2_countries_timeseries, 20)
 Create a line plot showing CO2 emissions over time for the top 5 countries:
 
 ```{r}
+#| echo: false
 # Add full country names to the data
 co2_countries_timeseries <- co2_countries_timeseries |>
     mutate(country_name = ifelse(region %in% names(region_names), 
                                   region_names[region], 
                                   region))
+```
+
+```{r}
 
 # Create the time series plot
 countries_plot <- ggplot(co2_countries_timeseries, aes(x = year, y = total_co2, color = country_name)) +
@@ -352,7 +388,10 @@ countries_plot <- ggplot(co2_countries_timeseries, aes(x = year, y = total_co2, 
     scale_x_continuous(breaks = seq(1995, 2022, by = 5))
 
 countries_plot
+```
 
+```{r}
+#| echo: false
 # Save the plot
 ggsave("co2_countries_timeseries.png", countries_plot, width = 10, height = 6, dpi = 300)
 ```
