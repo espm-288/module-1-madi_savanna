@@ -1,5 +1,5 @@
 # ⚓ Module 1: Tabular Data - A Pirate's Tale 🏴‍☠️
-
+[Team website](https://https://espm-288.github.io/module-1-madi_savanna/tabular-data.html)
 Working with larger-than-RAM data using duckdbfs
 
 ## 🗺️ Ahoy, Me Hearties! (Overview)
