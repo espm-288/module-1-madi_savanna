@@ -1,9 +1,23 @@
 ---
 title: "Module 1: Tabular Data"
 subtitle: "Working with larger-than-RAM data using duckdbfs"
-author: "ESPM 288"
+author: "Authors: Team Madi-Savannah + Bruno"
 date: today
 format: 
+    pdf:
+        toc: true
+        toc-depth: 3
+        number-sections: true
+        colorlinks: true
+        geometry:
+            - margin=1in
+        fontsize: 11pt
+        documentclass: article
+        papersize: letter
+        fig-pos: 'H'
+        code-block-bg: true
+        code-block-border-left: "#31BAE9"
+        titlepage: true
     html:
         theme: cosmo
         embed-resources: true
